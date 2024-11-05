@@ -1,0 +1,27 @@
+[
+    {
+        "title": "Super Song",
+        "author": "Author A",
+        "bpm": 120,
+        "beatsPerMeasure": 4,
+        "structure": [
+            { "section": "Intro", "bars": 4, "color": "#1abc9c" },
+            { "section": "Verse", "bars": 8, "color": "#3498db" },
+            { "section": "Chorus", "bars": 8, "color": "#9b59b6" },
+            { "section": "Outro", "bars": 4, "color": "#e74c3c" }
+        ]
+    },
+    {
+        "title": "Mega Song",
+        "author": "Author B",
+        "bpm": 100,
+        "beatsPerMeasure": 4,
+        "structure": [
+            { "section": "Intro", "bars": 2, "color": "#2ecc71" },
+            { "section": "Verse", "bars": 16, "color": "#9b59b6" },
+            { "section": "Chorus", "bars": 8, "color": "#e74c3c" },
+            { "section": "Bridge", "bars": 4, "color": "#34495e" },
+            { "section": "Chorus", "bars": 8, "color": "#e74c3c" }
+        ]
+    }
+]

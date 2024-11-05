@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Metronome 99</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #sidebar {
+            width: 250px;
+            background-color: #2c3e50;
+            padding: 10px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        #sidebar h2 {
+            margin-top: 0;
+            font-size: 20px;
+        }
+
+        #search-input {
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+
+        #sort-options {
+            margin-bottom: 10px;
+        }
+
+        #song-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .song-item {
+            padding: 5px;
+            cursor: pointer;
+            border-bottom: 1px solid #34495e;
+        }
+
+        .song-item:hover {
+            background-color: #34495e;
+        }
+
+        #main-content {
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        #header {
+            padding: 10px;
+            text-align: center;
+        }
+
+        #header label {
+            margin: 0 5px;
+        }
+
+        #header input[type="number"] {
+            width: 60px;
+            margin: 0 5px;
+        }
+
+        #header input[type="checkbox"] {
+            margin-left: 10px;
+        }
+
+        #header button {
+            margin: 0 5px;
+            padding: 5px 10px;
+        }
+
+        #song-title {
+            margin-top: 20px;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        #song-structure {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px;
+        }
+
+        .line {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .section-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-right: 10px;
+        }
+
+        .section-label {
+            color: white;
+            font-size: 18px;
+            margin-bottom: 5px;
+            text-align: center;
+        }
+
+        .bars {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .bar {
+            width: 40px;
+            height: 100px;
+            margin: 2px;
+            opacity: 1;
+            transition: opacity 0.3s;
+            cursor: pointer;
+        }
+
+        .current-bar {
+            border: 2px solid white;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h2>Song Library</h2>
+        <input type="file" id="file-input" accept=".json">
+        <input type="text" id="search-input" placeholder="Search by title or author">
+        <div id="sort-options">
+            Sort by:
+            <select id="sort-select">
+                <option value="title">Title</option>
+                <option value="author">Author</option>
+            </select>
+        </div>
+        <ul id="song-list"></ul>
+    </div>
+
+    <div id="main-content">
+        <div id="header">
+            <label for="bpm">BPM:</label>
+            <input type="number" id="bpm" value="60" min="1" max="300">
+            <label for="beats">Beats per Measure:</label>
+            <input type="number" id="beats" value="4" min="1" max="12">
+            <button id="start">Start</button>
+            <button id="stop">Stop</button>
+            <button id="tap">Tap</button>
+            <button id="restart">Restart</button>
+            <br>
+            <input type="checkbox" id="toggle-blink" checked>
+            <label for="toggle-blink">Blink Background</label>
+            <input type="checkbox" id="toggle-sound" checked>
+            <label for="toggle-sound">Sound</label>
+        </div>
+
+        <h2 id="song-title"></h2>
+
+        <div id="song-structure"></div>
+    </div>
+
+    <script>
+        let bpm = 60;
+        let beatsPerMeasure = 4;
+        let intervalId;
+        let currentBeat = 0;
+        let currentBarIndex = 0;
+        let context = new (window.AudioContext || window.webkitAudioContext)();
+
+        let tapTimes = [];
+        let barsArray = [];
+
+        // New variables for toggles
+        let isBlinkingEnabled = true;
+        let isSoundEnabled = true;
+
+        // Sample JSON data for song library
+        let songLibrary = [
+            {
+                title: "Sample Song Title",
+                author: "Author A",
+                bpm: 120,
+                beatsPerMeasure: 4,
+                structure: [
+                    { section: "Intro", bars: 4, color: "#1abc9c" },
+                    { section: "Verse", bars: 8, color: "#3498db" },
+                    { section: "Chorus", bars: 8, color: "#9b59b6" },
+                    { section: "Outro", bars: 4, color: "#e74c3c" }
+                ]
+            },
+            {
+                title: "Another Song",
+                author: "Author B",
+                bpm: 100,
+                beatsPerMeasure: 4,
+                structure: [
+                    { section: "Intro", bars: 2, color: "#2ecc71" },
+                    { section: "Verse", bars: 16, color: "#9b59b6" },
+                    { section: "Chorus", bars: 8, color: "#e74c3c" },
+                    { section: "Bridge", bars: 4, color: "#34495e" },
+                    { section: "Chorus", bars: 8, color: "#e74c3c" }
+                ]
+            },
+            // Add more songs as needed
+        ];
+
+        let song = songLibrary[0]; // Default song
+
+        let totalBars = 0;
+
+        document.getElementById('start').addEventListener('click', startMetronome);
+        document.getElementById('stop').addEventListener('click', stopMetronome);
+        document.getElementById('tap').addEventListener('click', tapTempo);
+        document.getElementById('restart').addEventListener('click', restartSong);
+        document.getElementById('search-input').addEventListener('input', updateSongList);
+        document.getElementById('sort-select').addEventListener('change', updateSongList);
+        document.getElementById('file-input').addEventListener('change', handleFileSelect);
+        document.getElementById('toggle-blink').addEventListener('change', function() {
+            isBlinkingEnabled = this.checked;
+        });
+        document.getElementById('toggle-sound').addEventListener('change', function() {
+            isSoundEnabled = this.checked;
+        });
+
+        function initialize() {
+            updateSongList();
+            loadSong(song);
+        }
+
+        function updateSongList() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const sortBy = document.getElementById('sort-select').value;
+
+            const filteredSongs = songLibrary.filter(song => {
+                return song.title.toLowerCase().includes(searchTerm) || song.author.toLowerCase().includes(searchTerm);
+            });
+
+            filteredSongs.sort((a, b) => {
+                if (a[sortBy].toLowerCase() < b[sortBy].toLowerCase()) return -1;
+                if (a[sortBy].toLowerCase() > b[sortBy].toLowerCase()) return 1;
+                return 0;
+            });
+
+            const songList = document.getElementById('song-list');
+            songList.innerHTML = '';
+
+            filteredSongs.forEach((songItem, index) => {
+                const li = document.createElement('li');
+                li.classList.add('song-item');
+                li.textContent = `${songItem.title} - ${songItem.author}`;
+                li.addEventListener('click', () => {
+                    loadSong(songItem);
+                });
+                songList.appendChild(li);
+            });
+        }
+
+        function loadSong(selectedSong) {
+            song = selectedSong;
+            bpm = song.bpm;
+            beatsPerMeasure = song.beatsPerMeasure;
+            document.getElementById('bpm').value = bpm;
+            document.getElementById('beats').value = beatsPerMeasure;
+            totalBars = song.structure.reduce((sum, section) => sum + section.bars, 0);
+            initializeSongStructure();
+        }
+
+        function initializeSongStructure() {
+            // Set song title
+            document.getElementById('song-title').textContent = song.title;
+
+            const songStructureDiv = document.getElementById('song-structure');
+            songStructureDiv.innerHTML = ''; // Clear existing content
+            barsArray = [];
+            currentBarIndex = 0;
+            currentBeat = 0;
+
+            let currentLine = document.createElement('div');
+            currentLine.classList.add('line');
+            songStructureDiv.appendChild(currentLine);
+
+            let barsInLine = 0;
+            const maxBarsPerLine = 16;
+
+            song.structure.forEach(section => {
+                const sectionGroup = document.createElement('div');
+                sectionGroup.classList.add('section-group');
+
+                // Add section label on top
+                const sectionLabel = document.createElement('div');
+                sectionLabel.textContent = section.section;
+                sectionLabel.classList.add('section-label');
+                sectionGroup.appendChild(sectionLabel);
+
+                // Bars container
+                const barsContainer = document.createElement('div');
+                barsContainer.classList.add('bars');
+                sectionGroup.appendChild(barsContainer);
+
+                let barsRemainingInSection = section.bars;
+
+                // Check if the section fits in the current line
+                if (barsInLine + section.bars > maxBarsPerLine) {
+                    // Move to next line
+                    currentLine = document.createElement('div');
+                    currentLine.classList.add('line');
+                    songStructureDiv.appendChild(currentLine);
+                    barsInLine = 0;
+                }
+
+                currentLine.appendChild(sectionGroup);
+
+                while (barsRemainingInSection > 0) {
+                    let barsRemainingInLine = maxBarsPerLine - barsInLine;
+                    let barsToAdd = Math.min(barsRemainingInLine, barsRemainingInSection);
+
+                    for (let i = 0; i < barsToAdd; i++) {
+                        const barDiv = document.createElement('div');
+                        barDiv.classList.add('bar');
+                        barDiv.style.backgroundColor = section.color;
+                        barDiv.dataset.barIndex = barsArray.length; // Store the bar index
+
+                        // Add event listener to bar
+                        barDiv.addEventListener('click', function() {
+                            currentBarIndex = parseInt(barDiv.dataset.barIndex);
+                            currentBeat = 0;
+                            resetBarsOpacity();
+                            updateBarHighlight();
+                            startMetronome();
+                        });
+
+                        barsContainer.appendChild(barDiv);
+                        barsArray.push(barDiv);
+                        barsInLine++;
+                        barsRemainingInSection--;
+                    }
+
+                    if (barsRemainingInSection > 0) {
+                        // Section is too big to fit in current line, move to next line
+                        currentLine = document.createElement('div');
+                        currentLine.classList.add('line');
+                        songStructureDiv.appendChild(currentLine);
+                        barsInLine = 0;
+
+                        // Create a new section group for the remaining bars with the label
+                        sectionGroup = document.createElement('div');
+                        sectionGroup.classList.add('section-group');
+
+                        // Only add the label once, so for continued sections, we can add an empty placeholder
+                        const emptyLabel = document.createElement('div');
+                        emptyLabel.classList.add('section-label');
+                        sectionGroup.appendChild(emptyLabel);
+
+                        // Create new bars container
+                        barsContainer = document.createElement('div');
+                        barsContainer.classList.add('bars');
+                        sectionGroup.appendChild(barsContainer);
+
+                        currentLine.appendChild(sectionGroup);
+                    }
+                }
+            });
+        }
+
+        function startMetronome() {
+            bpm = parseInt(document.getElementById('bpm').value);
+            beatsPerMeasure = parseInt(document.getElementById('beats').value);
+
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+
+            if (currentBarIndex >= barsArray.length) {
+                currentBarIndex = 0; // Restart if at the end
+            }
+
+            currentBeat = 0;
+            updateBarHighlight();
+
+            let interval = (60 / bpm) * 1000;
+            playBeat(); // Play first beat immediately
+            intervalId = setInterval(playBeat, interval);
+        }
+
+        function stopMetronome() {
+            if (intervalId) {
+                clearInterval(intervalId);
+                intervalId = null;
+            }
+            if (isBlinkingEnabled) {
+                document.body.style.backgroundColor = 'black';
+            }
+        }
+
+        function restartSong() {
+            stopMetronome();
+            currentBarIndex = 0;
+            currentBeat = 0;
+            resetBarsOpacity();
+            updateBarHighlight();
+            startMetronome();
+        }
+
+        function playBeat() {
+            currentBeat = (currentBeat % beatsPerMeasure) + 1;
+
+            // Blink effect if enabled
+            if (isBlinkingEnabled) {
+                document.body.style.backgroundColor = 'white';
+                setTimeout(function() {
+                    document.body.style.backgroundColor = 'black';
+                }, 100); // blink duration 100ms
+            }
+
+            // Play sound if enabled
+            if (isSoundEnabled) {
+                if (currentBeat === 1) {
+                    playClick('hard');
+                } else {
+                    playClick('soft');
+                }
+            }
+
+            // Move to next bar on the first beat
+            if (currentBeat === 1) {
+                if (currentBarIndex < barsArray.length) {
+                    if (currentBarIndex > 0) {
+                        // Lower opacity of the past bar
+                        barsArray[currentBarIndex - 1].style.opacity = 0.3;
+                        barsArray[currentBarIndex - 1].classList.remove('current-bar');
+                    }
+                    // Highlight current bar
+                    barsArray[currentBarIndex].classList.add('current-bar');
+                    currentBarIndex++;
+                } else {
+                    // Song has ended
+                    stopMetronome();
+                }
+            }
+        }
+
+        function playClick(type) {
+            let oscillator = context.createOscillator();
+            let gainNode = context.createGain();
+
+            if (type === 'hard') {
+                oscillator.frequency.value = 1000; // higher pitch for hard click
+            } else {
+                oscillator.frequency.value = 800; // lower pitch for soft click
+            }
+
+            gainNode.gain.value = 1;
+
+            oscillator.connect(gainNode);
+            gainNode.connect(context.destination);
+            oscillator.start();
+            oscillator.stop(context.currentTime + 0.05); // short beep
+        }
+
+        function tapTempo() {
+            const now = Date.now();
+
+            // Remove taps older than 4 taps ago
+            if (tapTimes.length >= 4) {
+                tapTimes.shift();
+            }
+
+            tapTimes.push(now);
+
+            if (tapTimes.length >= 2) {
+                // Calculate intervals between taps
+                let intervals = [];
+                for (let i = 1; i < tapTimes.length; i++) {
+                    intervals.push(tapTimes[i] - tapTimes[i - 1]);
+                }
+
+                // Calculate BPMs for each interval
+                let bpms = intervals.map(interval => 60000 / interval); // 60000 ms in a minute
+
+                // Calculate average BPM
+                let avgBpm = bpms.reduce((sum, value) => sum + value, 0) / bpms.length;
+                avgBpm = Math.round(avgBpm);
+
+                // Update BPM input field
+                document.getElementById('bpm').value = avgBpm;
+
+                // Restart metronome with new BPM if it's running
+                if (intervalId) {
+                    startMetronome();
+                }
+            }
+        }
+
+        function resetBarsOpacity() {
+            barsArray.forEach(bar => {
+                bar.style.opacity = 1;
+                bar.classList.remove('current-bar');
+            });
+        }
+
+        function updateBarHighlight() {
+            resetBarsOpacity();
+            if (currentBarIndex < barsArray.length) {
+                barsArray[currentBarIndex].classList.add('current-bar');
+            }
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const json = JSON.parse(e.target.result);
+                        if (Array.isArray(json)) {
+                            songLibrary = json;
+                            updateSongList();
+                            alert('Song library loaded successfully!');
+                        } else {
+                            alert('Invalid JSON format. Please provide an array of songs.');
+                        }
+                    } catch (error) {
+                        alert('Error parsing JSON file: ' + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        // Initialize the application
+        initialize();
+    </script>
+</body>
+</html>
